@@ -1,0 +1,149 @@
+Option Explicit
+
+' Public variable to pass the final selected date back to your macro
+Public selectedDate As Date
+Private IsInitializing As Boolean
+
+' Collection to hold instances of our custom class so they stay in memory
+Private ButtonCollection As Collection
+
+Private Sub btnDatePickOK_Click()
+
+Select Case frmNew.btnPressed
+Case "btnDOB"
+frmNew.tbDOB.Value = Format(selectedDate, "Short Date")
+Case "btnPrepDate"
+frmNew.tbPrepDate.Value = Format(selectedDate, "Short Date")
+Case "btnExpDate"
+frmNew.tbExpDate.Value = Format(selectedDate, "Short Date")
+End Select
+
+Me.Hide
+
+
+End Sub
+
+Private Sub UserForm_Initialize()
+    Dim i As Long
+    Dim currentYear As Long
+   
+    
+    
+    IsInitializing = True
+    currentYear = Year(Date)
+ 
+    
+   
+    ' Populate Months
+    With Me.cmbMonth
+        .Clear
+        .List = Array("January", "February", "March", "April", "May", "June", _
+                      "July", "August", "September", "October", "November", "December")
+        .ListIndex = Month(Date) - 1
+    End With
+    
+    ' Populate Years
+    With Me.cmbYear
+        .Clear
+        For i = currentYear - 100 To currentYear + 0
+            .AddItem i
+        Next i
+        .Value = currentYear
+    End With
+    
+    IsInitializing = False
+    
+    ' Build the dynamic grid for the first time
+    BuildButtonCalendar
+End Sub
+
+Private Sub cmbMonth_Change()
+    If Not IsInitializing Then BuildButtonCalendar
+End Sub
+
+Private Sub cmbYear_Change()
+    If Not IsInitializing Then BuildButtonCalendar
+End Sub
+
+' CORE LOGIC: REMOVE OLD BUTTONS AND BUILD NEW ONES
+Private Sub BuildButtonCalendar()
+    Dim targetMonth As Integer, targetYear As Long
+    Dim firstOfMonth As Date, daysInMonth As Integer, startingDayOfWeek As Integer
+    Dim r As Integer, c As Integer
+    Dim btnLeft As Single, btnTop As Single, btnWidth As Single, btnHeight As Single
+    Dim currentDay As Integer
+    Dim ctrl As Control
+    Dim btnHandler As CalendarButton
+    Dim i As Long
+    
+    ' 1. Initialize or reset our custom class instance collection safely
+    If ButtonCollection Is Nothing Then
+        Set ButtonCollection = New Collection
+    Else
+        Set ButtonCollection = New Collection
+    End If
+    
+    ' Loop backwards to safely delete old generated controls
+    For i = Me.Controls.Count - 1 To 0 Step -1
+        If Left(Me.Controls(i).Name, 6) = "dynBtn" Then
+            Me.Controls.Remove Me.Controls(i).Name
+        End If
+    Next i
+    
+    ' Validate selections
+    If Me.cmbMonth.ListIndex = -1 Or Me.cmbYear.Value = "" Then Exit Sub
+    
+    targetMonth = Me.cmbMonth.ListIndex + 1
+    targetYear = CLng(Me.cmbYear.Value)
+    
+    ' 2. Calculate calendar layout variables
+    firstOfMonth = DateSerial(targetYear, targetMonth, 1)
+    daysInMonth = Day(DateSerial(targetYear, targetMonth + 1, 0))
+    startingDayOfWeek = Weekday(firstOfMonth, vbMonday) - 1 ' Monday = 0, Sunday = 6
+    
+    ' Layout styling dimensions for the grid
+    btnWidth = 30
+    btnHeight = 25
+    currentDay = 1
+    
+    ' 3. Loop through 6 rows and 7 columns to generate the grid positions
+    For r = 0 To 5
+        For c = 0 To 6
+            
+            ' Check if this coordinate gets a numbered day card
+            If (r = 0 And c >= startingDayOfWeek) Or (r > 0 And currentDay <= daysInMonth) Then
+                If currentDay <= daysInMonth Then
+                    
+                    ' Map spatial layout matching the grid matrix
+                    btnLeft = 20 + (c * (btnWidth + 4))   ' 4pt horizontal gap
+                    btnTop = 60 + (r * (btnHeight + 4))  ' 4pt vertical gap below dropdowns
+                    
+                    ' Create a physical command button on the form
+                    Set ctrl = Me.Controls.Add("Forms.CommandButton.1", "dynBtn_" & currentDay, True)
+                    
+                    With ctrl
+                        .Caption = CStr(currentDay)
+                        .Left = btnLeft
+                        .Top = btnTop
+                        .Width = btnWidth
+                        .Height = btnHeight
+                        .Font.Size = 9
+                    End With
+                    
+                    ' Tie the new button to our Class Module event framework
+                    Set btnHandler = New CalendarButton
+                    Set btnHandler.ClickableButton = ctrl
+                    btnHandler.ThisButtonDate = DateSerial(targetYear, targetMonth, currentDay)
+                    Set btnHandler.ParentForm = Me
+                    
+                    ' Add to collection to preserve event life cycle scope
+                    ButtonCollection.Add btnHandler
+                    
+                    currentDay = currentDay + 1
+                End If
+            End If
+            
+        Next c
+    Next r
+End Sub
+
